@@ -1,0 +1,7 @@
+{
+  "intelephense.environment.includePaths": [
+    "/Users/Philipp/Sites/development/FileSyncGo/vendor",
+    "/Users/Philipp/Contao-Extensions/fileSyncGo/vendor"
+  ],
+  "intelephense.files.maxSize": 5000000
+}
