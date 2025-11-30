@@ -5,6 +5,7 @@ namespace PhilTenno\FileSyncGo\Entity;
 use Doctrine\ORM\Mapping as ORM;
 use DateTimeImmutable;
 use PhilTenno\FileSyncGo\Repository\FilesyncRateEntryRepository;
+use PhilTenno\FileSyncGo\Entity\FilesyncToken;
 
 #[ORM\Entity(repositoryClass: FilesyncRateEntryRepository::class)]
 #[ORM\Table(name: "filesync_rate_entries")]
