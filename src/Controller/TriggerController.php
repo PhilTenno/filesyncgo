@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-namespace PhilTenno\FilesyncGo\Controller;
+namespace PhilTenno\FileSyncGo\Controller;
 
-use PhilTenno\FilesyncGo\Rate\RateLimitExceededException;
-use PhilTenno\FilesyncGo\Rate\RateLimiter;
-use PhilTenno\FilesyncGo\Security\TokenVerifier;
+use PhilTenno\FileSyncGo\Rate\RateLimitExceededException;
+use PhilTenno\FileSyncGo\Rate\RateLimiter;
+use PhilTenno\FileSyncGo\Security\TokenVerifier;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 use Symfony\Component\Process\Process;
@@ -51,7 +51,7 @@ final class TriggerController
                 return new JsonResponse(['status' => 'error', 'message' => 'Invalid request.'], 400);
             }
 
-            // Verify token (TokenVerifier takes care of time-constant checks)
+            // Verify token (TokenVerifier must perform time-constant checks)
             $tokenEntity = $this->tokenVerifier->verifyRequest($request);
             if ($tokenEntity === null) {
                 $this->logger->info('Invalid token.', ['action' => 'trigger']);
@@ -69,33 +69,30 @@ final class TriggerController
             }
 
             // Trigger the global file sync:
-            // 1) Prefer internal service if available
             if ($this->container->has('contao.files_synchronizer')) {
                 $syncService = $this->container->get('contao.files_synchronizer');
 
-                // Best-effort: call common method names if present
                 if (is_object($syncService)) {
                     if (method_exists($syncService, 'synchronize')) {
                         $syncService->synchronize();
                     } elseif (method_exists($syncService, 'sync')) {
                         $syncService->sync();
                     } else {
-                        // Unknown API on service — fallback to CLI
-                        $this->logger->info('Files synchronizer service found but no known method; falling back to CLI.', ['action' => 'trigger']);
+                        $this->logger->info('Files synchronizer service found but unknown API; falling back to CLI.', ['action' => 'trigger']);
                         $this->runCliSync();
                     }
                 } else {
                     $this->runCliSync();
                 }
             } else {
-                // 2) Fallback: run console command vendor/bin/contao-console contao:files:sync
+                // Fallback to CLI
                 $this->runCliSync();
             }
 
             $this->logger->info('File synchronized.', ['action' => 'trigger', 'token_id' => $tokenId]);
             return new JsonResponse(['status' => 'success', 'message' => 'File synchronized.'], 200);
         } catch (\Throwable $e) {
-            // Generic error handling: do not leak sensitive details
+            // Log minimal error (no sensitive data)
             $this->logger->error('Internal server error.', ['action' => 'trigger', 'error' => $e->getMessage()]);
             return new JsonResponse(['status' => 'error', 'message' => 'Internal server error.'], 500);
         }
@@ -103,19 +100,34 @@ final class TriggerController
 
     private function runCliSync(): void
     {
-        // Build path to contao-console; allow typical location vendor/bin/contao-console
-        $console = $this->projectDir . '/vendor/bin/contao-console';
+        // Typical console locations: vendor/bin/contao-console or bin/console
+        // Prefer vendor/bin/contao-console by default
+        $consoleCandidates = [
+            $this->projectDir . '/vendor/bin/contao-console',
+            $this->projectDir . '/bin/console',
+        ];
 
-        // Use the Symfony Process component to run the command
-        $process = Process::fromShellCommandline(escapeshellcmd($console) . ' contao:files:sync');
+        $console = null;
+        foreach ($consoleCandidates as $candidate) {
+            if (is_file($candidate) && is_executable($candidate)) {
+                $console = $candidate;
+                break;
+            }
+        }
+
+        if ($console === null) {
+            throw new \RuntimeException('No console binary found for CLI fallback.');
+        }
+
+        // Build safe shell command
+        $cmd = escapeshellcmd($console) . ' contao:files:sync';
+
+        $process = Process::fromShellCommandline($cmd);
         $process->setTimeout(300); // 5 minutes
         $process->run();
 
         if (!$process->isSuccessful()) {
-            // Throw to be caught by outer handler and logged as 500
             throw new \RuntimeException('Files sync command failed: ' . $process->getErrorOutput());
         }
-
-        // Success -> do not log command output (avoid sensitive data)
     }
 }

@@ -28,5 +28,12 @@
     "extra": {
         "contao-manager-plugin": "PhilTenno\\FileSyncGo\\ContaoManager\\Plugin"
 
-    }  
+    },
+    "config": {
+        "allow-plugins": {
+            "contao-components/installer": true,
+            "php-http/discovery": true,
+            "contao/manager-plugin": true
+        }
+    }
 }

@@ -1,4 +1,4 @@
 filesyncgo.trigger:
     path: /filesyncgo/trigger
-    controller: 'PhilTenno\FilesyncGo\Controller\TriggerController::trigger'
+    controller: 'PhilTenno\FileSyncGo\Controller\TriggerController::trigger'
     methods: [POST]

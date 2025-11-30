@@ -1,11 +1,18 @@
 services:
-    PhilTenno\FilesyncGo\Controller\TriggerController:
+    PhilTenno\FileSyncGo\Controller\TriggerController:
         arguments:
-            $tokenVerifier: '@PhilTenno\FilesyncGo\Security\TokenVerifier'
-            $rateLimiter:   '@PhilTenno\FilesyncGo\Rate\RateLimiter'
-            $logger:        '@monolog.logger.contao.filesyncgo' # fallback to '@logger' if you don't create the channel
+            $tokenVerifier: '@PhilTenno\FileSyncGo\Security\TokenVerifier'
+            $rateLimiter:   '@PhilTenno\FileSyncGo\Rate\RateLimiter'
+            $logger:        '@monolog.logger.contao.filesyncgo' # ensure this monolog channel exists
             $container:     '@service_container'
             $projectDir:    '%kernel.project_dir%'
         tags: ['controller.service_arguments']
 
-    # Ensure TokenVerifier and RateLimiter are registered (as discussed previously)
+    # Basic service registrations (autowire so DI will resolve constructor args)
+    PhilTenno\FileSyncGo\Security\TokenVerifier:
+        autowire: true
+        public: false
+
+    PhilTenno\FileSyncGo\Rate\RateLimiter:
+        autowire: true
+        public: false
