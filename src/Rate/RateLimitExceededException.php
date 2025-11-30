@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace PhilTenno\FilesyncGo\Rate;
+namespace PhilTenno\FileSyncGo\Rate;
 
 use RuntimeException;
 

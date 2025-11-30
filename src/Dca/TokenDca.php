@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace PhilTenno\FilesyncGo\Dca;
+namespace PhilTenno\FileSyncGo\Dca;
 
 use Contao\DataContainer;
 use Contao\Database;

@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace PhilTenno\FilesyncGo\Security;
+namespace PhilTenno\FileSyncGo\Security;
 
 use Doctrine\ORM\EntityManagerInterface;
 use PhilTenno\FilesyncGo\Entity\FilesyncToken;
