@@ -3,7 +3,8 @@
 namespace PhilTenno\FileSyncGo\Service;
 
 use Doctrine\ORM\EntityManagerInterface;
-use Doctrine\ORM\LockMode;
+//use Doctrine\ORM\LockMode;
+use Doctrine\DBAL\LockMode;
 use PhilTenno\FileSyncGo\Entity\FilesyncToken;
 use PhilTenno\FileSyncGo\Entity\FilesyncRateEntry;
 use PhilTenno\FileSyncGo\Repository\FilesyncRateEntryRepository;

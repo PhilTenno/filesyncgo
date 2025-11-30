@@ -1,0 +1,12 @@
+# config/packages/filesyncgo_monolog.yaml
+monolog:
+  channels: ['contao.filesyncgo']
+
+  handlers:
+    filesyncgo:
+      type: stream
+      path: '%kernel.logs_dir%/filesyncgo.log'
+      level: info
+      channels: ['contao.filesyncgo']
+      # Optional: rotate logs via rotating_file handler if you prefer retention/rotation
+      # use a separate handler with type: rotating_file for automatic rotation.
