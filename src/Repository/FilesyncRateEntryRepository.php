@@ -2,11 +2,11 @@
 
 namespace PhilTenno\FileSyncGo\Repository;
 
+use DateTimeImmutable;
 use Doctrine\Persistence\ManagerRegistry;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use PhilTenno\FileSyncGo\Entity\FilesyncRateEntry;
 use PhilTenno\FileSyncGo\Entity\FilesyncToken;
-use DateTimeImmutable;
 
 class FilesyncRateEntryRepository extends ServiceEntityRepository
 {
@@ -16,7 +16,7 @@ class FilesyncRateEntryRepository extends ServiceEntityRepository
     }
 
     /**
-     * Count requests for a token since a given time.
+     * Count requests for a token since a given DateTimeImmutable.
      */
     public function countRequestsSince(FilesyncToken $token, DateTimeImmutable $since): int
     {
