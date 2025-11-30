@@ -48,18 +48,27 @@ class TokenManager
     }
 
     /**
-     * Verify provided token against stored hash(s). Uses password_verify (time-constant).
+     * Verify provided token (boolean).
      */
     public function verifyToken(string $token): bool
     {
-        $tokens = $this->repo->findAll();
-        foreach ($tokens as $row) {
+        return null !== $this->findTokenEntityByPlain($token);
+    }
+
+    /**
+     * Find and return the matching FilesyncToken entity for a plaintext token,
+     * or null if not found. Uses password_verify (time-constant).
+     */
+    public function findTokenEntityByPlain(string $token): ?FilesyncToken
+    {
+        $rows = $this->repo->findAll();
+        foreach ($rows as $row) {
             if (password_verify($token, $row->getTokenHash())) {
-                return true;
+                return $row;
             }
         }
 
-        return false;
+        return null;
     }
 
     /**
@@ -73,7 +82,7 @@ class TokenManager
         }
 
         $last = $current->getLastChars();
-        return 'xxxx...'.($last ?? '****');
+        return 'xxxx...' . ($last ?? '****');
     }
 
     /**
@@ -86,7 +95,6 @@ class TokenManager
 
     private function generateUrlSafeRandom(int $length): string
     {
-        // base64url: generate enough bytes then trim
         $bytes = random_bytes((int)ceil($length * 3 / 4));
         $b64 = rtrim(strtr(base64_encode($bytes), '+/', '-_'), '=');
         return substr($b64, 0, $length);
