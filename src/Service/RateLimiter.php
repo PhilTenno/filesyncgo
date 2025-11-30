@@ -33,10 +33,12 @@ class RateLimiter
 
         $conn->beginTransaction();
         try {
-            // Ensure token is managed
-            $managedToken = $this->em->merge($token);
-            // Lock row for this token to ensure atomicity per token
-            $this->em->lock($managedToken, LockMode::PESSIMISTIC_WRITE);
+            // Load managed token and obtain DB row lock for atomicity
+            $managedToken = $this->em->find(FilesyncToken::class, $token->getId(), LockMode::PESSIMISTIC_WRITE);
+            if (!$managedToken) {
+                $conn->rollBack();
+                return false;
+            }
 
             $count = $this->repo->countRequestsSince($managedToken, $since);
 
