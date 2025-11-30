@@ -1,80 +1,121 @@
 <?php
 
-namespace PhilTenno\FileSyncGo\Controller;
+declare(strict_types=1);
 
-use PhilTenno\FileSyncGo\Service\TokenManager;
-use PhilTenno\FileSyncGo\Service\SyncService;
-use PhilTenno\FileSyncGo\Service\RateLimiter;
+namespace PhilTenno\FilesyncGo\Controller;
+
+use PhilTenno\FilesyncGo\Rate\RateLimitExceededException;
+use PhilTenno\FilesyncGo\Rate\RateLimiter;
+use PhilTenno\FilesyncGo\Security\TokenVerifier;
 use Psr\Log\LoggerInterface;
+use Symfony\Component\DependencyInjection\ContainerInterface;
+use Symfony\Component\Process\Process;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
-use Symfony\Component\Routing\Annotation\Route;
 
-class TriggerController
+final class TriggerController
 {
-    private TokenManager $tokenManager;
-    private SyncService $syncService;
+    private TokenVerifier $tokenVerifier;
     private RateLimiter $rateLimiter;
     private LoggerInterface $logger;
+    private ContainerInterface $container;
+    private string $projectDir;
 
     public function __construct(
-        TokenManager $tokenManager,
-        SyncService $syncService,
+        TokenVerifier $tokenVerifier,
         RateLimiter $rateLimiter,
-        LoggerInterface $logger
+        LoggerInterface $logger,
+        ContainerInterface $container,
+        string $projectDir
     ) {
-        $this->tokenManager = $tokenManager;
-        $this->syncService = $syncService;
+        $this->tokenVerifier = $tokenVerifier;
         $this->rateLimiter = $rateLimiter;
         $this->logger = $logger;
+        $this->container = $container;
+        $this->projectDir = $projectDir;
     }
 
-    #[Route('/filesyncgo/trigger', name: 'filesyncgo.trigger', methods: ['POST'])]
-    public function __invoke(Request $request): JsonResponse
+    public function trigger(Request $request): JsonResponse
     {
         try {
-            // 1) Body must be empty
-            $content = (string) $request->getContent();
-            if ($content !== '') {
-                $this->logger->warning('Invalid request: non-empty body');
+            // HTTPS required
+            if (!$request->isSecure()) {
+                $this->logger->warning('Invalid request (non-HTTPS).', ['action' => 'trigger']);
                 return new JsonResponse(['status' => 'error', 'message' => 'Invalid request.'], 400);
             }
 
-            // 2) Parse Authorization header: "Bearer <token>"
-            $auth = $request->headers->get('Authorization', '');
-            if (!is_string($auth) || stripos($auth, 'Bearer ') !== 0) {
-                $this->logger->warning('Invalid token');
+            // Body must be empty
+            $body = trim((string) $request->getContent());
+            if ($body !== '') {
+                $this->logger->warning('Invalid request (non-empty body).', ['action' => 'trigger']);
+                return new JsonResponse(['status' => 'error', 'message' => 'Invalid request.'], 400);
+            }
+
+            // Verify token (TokenVerifier takes care of time-constant checks)
+            $tokenEntity = $this->tokenVerifier->verifyRequest($request);
+            if ($tokenEntity === null) {
+                $this->logger->info('Invalid token.', ['action' => 'trigger']);
                 return new JsonResponse(['status' => 'error', 'message' => 'Invalid token.'], 401);
             }
 
-            $token = trim(substr($auth, 7));
-            if ($token === '') {
-                $this->logger->warning('Invalid token');
-                return new JsonResponse(['status' => 'error', 'message' => 'Invalid token.'], 401);
-            }
+            $tokenId = (int) $tokenEntity->getId();
 
-            // 3) Verify token and retrieve entity (time-constant inside TokenManager)
-            $tokenEntity = $this->tokenManager->findTokenEntityByPlain($token);
-            if (!$tokenEntity) {
-                $this->logger->warning('Invalid token');
-                return new JsonResponse(['status' => 'error', 'message' => 'Invalid token.'], 401);
-            }
-
-            // 4) Rate limiting (real DB-based limiter)
-            if (!$this->rateLimiter->allowRequest($tokenEntity)) {
-                $this->logger->warning('Rate limit exceeded');
+            // Rate limiter (throws RateLimitExceededException on exceed)
+            try {
+                $this->rateLimiter->consume($tokenId);
+            } catch (RateLimitExceededException $e) {
+                $this->logger->warning('Rate limit exceeded.', ['action' => 'trigger', 'token_id' => $tokenId]);
                 return new JsonResponse(['status' => 'error', 'message' => 'Rate limit exceeded.'], 429);
             }
 
-            // 5) Trigger Contao global file synchronization
-            $this->syncService->sync();
+            // Trigger the global file sync:
+            // 1) Prefer internal service if available
+            if ($this->container->has('contao.files_synchronizer')) {
+                $syncService = $this->container->get('contao.files_synchronizer');
 
-            $this->logger->info('File synchronization triggered successfully');
+                // Best-effort: call common method names if present
+                if (is_object($syncService)) {
+                    if (method_exists($syncService, 'synchronize')) {
+                        $syncService->synchronize();
+                    } elseif (method_exists($syncService, 'sync')) {
+                        $syncService->sync();
+                    } else {
+                        // Unknown API on service — fallback to CLI
+                        $this->logger->info('Files synchronizer service found but no known method; falling back to CLI.', ['action' => 'trigger']);
+                        $this->runCliSync();
+                    }
+                } else {
+                    $this->runCliSync();
+                }
+            } else {
+                // 2) Fallback: run console command vendor/bin/contao-console contao:files:sync
+                $this->runCliSync();
+            }
+
+            $this->logger->info('File synchronized.', ['action' => 'trigger', 'token_id' => $tokenId]);
             return new JsonResponse(['status' => 'success', 'message' => 'File synchronized.'], 200);
         } catch (\Throwable $e) {
-            // Log minimal error without sensitive data
-            $this->logger->error('Internal server error during filesync trigger: ' . $e->getMessage());
+            // Generic error handling: do not leak sensitive details
+            $this->logger->error('Internal server error.', ['action' => 'trigger', 'error' => $e->getMessage()]);
             return new JsonResponse(['status' => 'error', 'message' => 'Internal server error.'], 500);
         }
+    }
+
+    private function runCliSync(): void
+    {
+        // Build path to contao-console; allow typical location vendor/bin/contao-console
+        $console = $this->projectDir . '/vendor/bin/contao-console';
+
+        // Use the Symfony Process component to run the command
+        $process = Process::fromShellCommandline(escapeshellcmd($console) . ' contao:files:sync');
+        $process->setTimeout(300); // 5 minutes
+        $process->run();
+
+        if (!$process->isSuccessful()) {
+            // Throw to be caught by outer handler and logged as 500
+            throw new \RuntimeException('Files sync command failed: ' . $process->getErrorOutput());
+        }
+
+        // Success -> do not log command output (avoid sensitive data)
     }
 }

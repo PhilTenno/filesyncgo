@@ -7,3 +7,15 @@ services:
   PhilTenno\FileSyncGo\:
     resource: '../src/*'
     exclude: '../src/{ContaoManager,DependencyInjection,FileSyncGoBundle.php}'
+  
+  PhilTenno\FilesyncGo\Security\TokenVerifier:
+    arguments:
+      $em: '@doctrine.orm.entity_manager'
+      $logger: '@monolog.logger.contao.filesyncgo' 
+    public: false
+
+  PhilTenno\FilesyncGo\Rate\RateLimiter:
+    arguments:
+      $conn: '@doctrine.dbal.default_connection'
+      $logger: '@monolog.logger.contao.filesyncgo'
+    public: false
